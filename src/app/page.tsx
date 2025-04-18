@@ -59,6 +59,104 @@ function playSong(data: string) {
   }
 }
 
+// Download song as WAV file
+async function downloadSong(data: string, filename: string = "song") {
+  try {
+    const parts = data.trim().split(/\s+/);
+    if (parts.length % 2 !== 0) {
+      alert('Data must be in "NOTE DURATION" pairs, e.g. C4 0.5 D4 0.5');
+      return;
+    }
+    const durations: number[] = [];
+    for (let i = 1; i < parts.length; i += 2) {
+      durations.push(parseFloat(parts[i]));
+    }
+    const totalDuration = durations.reduce((a, b) => a + b, 0);
+    const sampleRate = 44100;
+    const offlineCtx = new OfflineAudioContext(1, sampleRate * totalDuration, sampleRate);
+    let t = 0;
+    for (let i = 0; i < parts.length; i += 2) {
+      const note = parts[i];
+      const dur = parseFloat(parts[i + 1]);
+      const freq = noteToFrequency(note);
+      const osc = offlineCtx.createOscillator();
+      const gain = offlineCtx.createGain();
+      osc.frequency.value = freq;
+      osc.type = "square";
+      osc.connect(gain);
+      gain.connect(offlineCtx.destination);
+      gain.gain.setValueAtTime(0.1, t);
+      osc.start(t);
+      osc.stop(t + dur);
+      t += dur;
+    }
+    const renderedBuffer = await offlineCtx.startRendering();
+    const wavBuffer = bufferToWav(renderedBuffer);
+    const blob = new Blob([wavBuffer], { type: "audio/wav" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.style.display = "none";
+    a.href = url;
+    a.download = filename.endsWith(".wav") ? filename : `${filename}.wav`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+  } catch (e) {
+    alert("Error downloading song: " + e);
+  }
+}
+
+// Helper to convert AudioBuffer to WAV ArrayBuffer
+function bufferToWav(buffer: AudioBuffer): ArrayBuffer {
+  const numOfChan = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const bitDepth = 16;
+  const dataLength = buffer.length * numOfChan * (bitDepth / 8);
+  const bufferLength = 44 + dataLength;
+  const buf = new ArrayBuffer(bufferLength);
+  const view = new DataView(buf);
+  /* RIFF identifier */
+  writeString(view, 0, "RIFF");
+  /* file length minus RIFF identifier and length fields */
+  view.setUint32(4, 36 + dataLength, true);
+  /* WAVE type */
+  writeString(view, 8, "WAVE");
+  /* fmt chunk */
+  writeString(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numOfChan, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * numOfChan * (bitDepth / 8), true);
+  view.setUint16(32, numOfChan * (bitDepth / 8), true);
+  view.setUint16(34, bitDepth, true);
+  /* data chunk */
+  writeString(view, 36, "data");
+  view.setUint32(40, dataLength, true);
+  /* interleave data */
+  let offset = 44;
+  for (let i = 0; i < buffer.length; i++) {
+    for (let ch = 0; ch < numOfChan; ch++) {
+      let sample = buffer.getChannelData(ch)[i];
+      sample = Math.max(-1, Math.min(1, sample));
+      const int16 = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+      view.setInt16(offset, int16, true);
+      offset += 2;
+    }
+  }
+  return buf;
+}
+
+// Helper to write ASCII strings to DataView
+function writeString(view: DataView, offset: number, str: string) {
+  for (let i = 0; i < str.length; i++) {
+    view.setUint8(offset + i, str.charCodeAt(i));
+  }
+}
+
 // Instant App ID - replace with your own Instant App ID
 const APP_ID = "3c5161c1-7e56-42b4-a5f7-313ca32c28ac";
 
@@ -268,6 +366,12 @@ function Composer({ song }: { song: Song }) {
           className="px-3 py-1 bg-green-600 text-white rounded"
         >
           Play
+        </button>
+        <button
+          onClick={() => downloadSong(data, title)}
+          className="px-3 py-1 bg-purple-600 text-white rounded"
+        >
+          Download
         </button>
       </div>
     </div>
