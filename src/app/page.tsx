@@ -73,7 +73,11 @@ async function downloadSong(data: string, filename: string = "song") {
     }
     const totalDuration = durations.reduce((a, b) => a + b, 0);
     const sampleRate = 44100;
-    const offlineCtx = new OfflineAudioContext(1, sampleRate * totalDuration, sampleRate);
+    const offlineCtx = new OfflineAudioContext(
+      1,
+      sampleRate * totalDuration,
+      sampleRate
+    );
     let t = 0;
     for (let i = 0; i < parts.length; i += 2) {
       const note = parts[i];
@@ -224,12 +228,20 @@ function ShareView({ songId }: { songId: string }) {
       <pre className="whitespace-pre-wrap bg-gray-100 p-2 rounded">
         {song.data}
       </pre>
-      <button
-        onClick={() => playSong(song.data)}
-        className="px-3 py-1 bg-blue-600 text-white rounded"
-      >
-        Play
-      </button>
+      <div className="space-x-2">
+        <button
+          onClick={() => playSong(song.data)}
+          className="px-3 py-1 bg-blue-600 text-white rounded"
+        >
+          Play
+        </button>
+        <button
+          onClick={() => downloadSong(song.data, song.title)}
+          className="px-3 py-1 bg-purple-600 text-white rounded"
+        >
+          Download
+        </button>
+      </div>
     </div>
   );
 }
